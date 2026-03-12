@@ -1,0 +1,159 @@
+# Projeto-de-Banco-de-Dados
+
+1 - CÓDIGO FONTE COMPLETO DO PROJETO:
+Código-Fonte da Aplicação (Python + ORM SQLAlchemy)
+
+from typing import List, Optional
+from sqlalchemy import create_engine, ForeignKey, Table, Column, Integer, String, Numeric, DateTime, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
+
+# Configuração da Conexão
+DATABASE_URL = "postgresql://postgres:senha@localhost:5432/postgres"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+class Base(DeclarativeBase):
+    pass
+
+# Tabela Associativa N:N (Jogo <-> Coleção)
+# Essencial para que um jogo pertença a múltiplas listas personalizadas.
+jogo_colecao = Table(
+    "jogo_colecao",
+    Base.metadata,
+    Column("id_jogo", ForeignKey("jogo.id_jogo"), primary_key=True),
+    Column("id_colecao", ForeignKey("colecao.id_colecao"), primary_key=True),
+)
+
+class Usuario(Base):
+    __tablename__ = "usuario"
+    id_usuario: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(50), unique=True)
+    email: Mapped[str] = mapped_column(String(100), unique=True)
+    senha: Mapped[str] = mapped_column(String(255))
+    jogos: Mapped[List["Jogo"]] = relationship(back_populates="dono")
+
+class Jogo(Base):
+    __tablename__ = "jogo"
+    id_jogo: Mapped[int] = mapped_column(primary_key=True)
+    id_usuario: Mapped[int] = mapped_column(ForeignKey("usuario.id_usuario"))
+    id_genero: Mapped[int] = mapped_column(ForeignKey("genero.id_genero"))
+    titulo: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="não iniciado")
+    horas_jogadas: Mapped[float] = mapped_column(Numeric(10,2), default=0.00)
+    avaliacao: Mapped[Optional[int]] = mapped_column(Integer)
+
+    dono: Mapped["Usuario"] = relationship(back_populates="jogos")
+    colecoes: Mapped[List["Colecao"]] = relationship(secondary=jogo_colecao, back_populates="jogos")
+
+class Genero(Base):
+    __tablename__ = "genero"
+    id_genero: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(50), unique=True)
+
+class Colecao(Base):
+    __tablename__ = "colecao"
+    id_colecao: Mapped[int] = mapped_column(primary_key=True)
+    id_usuario: Mapped[int] = mapped_column(ForeignKey("usuario.id_usuario"))
+    nome_colecao: Mapped[str] = mapped_column(String(50))
+    jogos: Mapped[List["Jogo"]] = relationship(secondary=jogo_colecao, back_populates="colecoes")
+
+    Código-Fonte do Banco de Dados (SQL Consolidado
+    -- I. LIMPEZA E ESTRUTURA (DDL)
+DROP VIEW IF EXISTS v_catalogo_detalhado;
+DROP MATERIALIZED VIEW IF EXISTS mv_resumo_estatistico;
+DROP TABLE IF EXISTS jogo_colecao CASCADE;
+DROP TABLE IF EXISTS colecao CASCADE;
+DROP TABLE IF EXISTS jogo CASCADE;
+DROP TABLE IF EXISTS plataforma CASCADE;
+DROP TABLE IF EXISTS genero CASCADE;
+DROP TABLE IF EXISTS usuario CASCADE;
+
+CREATE TABLE usuario (
+    id_usuario SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL CONSTRAINT uq_usuario_nome UNIQUE,
+    email VARCHAR(100) NOT NULL CONSTRAINT uq_usuario_email UNIQUE,
+    senha VARCHAR(255) NOT NULL,
+    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE genero (
+    id_genero SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE plataforma (
+    id_plataforma SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE jogo (
+    id_jogo SERIAL PRIMARY KEY,
+    id_usuario INTEGER NOT NULL,
+    id_genero INTEGER NOT NULL,
+    id_plataforma INTEGER NOT NULL,
+    titulo VARCHAR(100) NOT NULL,
+    status VARCHAR(20) DEFAULT 'não iniciado',
+    horas_jogadas NUMERIC(10,2) DEFAULT 0.00,
+    avaliacao INTEGER,
+    -- ON DELETE CASCADE: Remove jogos se o usuário for deletado.
+    CONSTRAINT fk_jogo_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
+    -- CHECK: Garante integridade dos dados qualitativos e quantitativos.
+    CONSTRAINT ck_status CHECK (status IN ('não iniciado', 'jogando', 'finalizado')),
+    CONSTRAINT ck_avaliacao CHECK (avaliacao >= 0 AND avaliacao <= 10),
+    CONSTRAINT ck_horas_positivas CHECK (horas_jogadas >= 0)
+);
+
+CREATE TABLE colecao (
+    id_colecao SERIAL PRIMARY KEY,
+    id_usuario INTEGER NOT NULL,
+    nome_colecao VARCHAR(50) NOT NULL,
+    CONSTRAINT fk_colecao_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+);
+
+CREATE TABLE jogo_colecao (
+    id_jogo INTEGER NOT NULL,
+    id_colecao INTEGER NOT NULL,
+    PRIMARY KEY (id_jogo, id_colecao), -- Chave Primária Composta.
+    CONSTRAINT fk_rel_jogo FOREIGN KEY (id_jogo) REFERENCES jogo(id_jogo) ON DELETE CASCADE,
+    CONSTRAINT fk_rel_colecao FOREIGN KEY (id_colecao) REFERENCES colecao(id_colecao) ON DELETE CASCADE
+);
+
+-- II. CARGA DE DADOS (DML)
+INSERT INTO usuario (nome, email, senha) VALUES 
+('joão silva', 'joao.silva@pt.mail', 'tuga123'), 
+('maria fernandes', 'm.fernandes@pt.cloud', 'lisboa404');
+
+INSERT INTO genero (nome) VALUES ('rpg'), ('ação');
+INSERT INTO plataforma (nome) VALUES ('pc'), ('ps5');
+
+INSERT INTO jogo (id_usuario, id_genero, id_plataforma, titulo, status, horas_jogadas, avaliacao) VALUES 
+(1, 1, 1, 'the witcher 3', 'finalizado', 120.50, 10),
+(1, 2, 1, 'cyberpunk 2077', 'jogando', 45.00, 8);
+
+-- III. OTIMIZAÇÃO E AUTOMAÇÃO
+-- Índices para transformar Seq Scan em Index Scan em grandes volumes.
+CREATE INDEX idx_jogo_titulo ON jogo(titulo);
+CREATE INDEX idx_jogo_id_genero ON jogo(id_genero);
+
+-- View Materializada para dashboards de alta performance.
+CREATE MATERIALIZED VIEW mv_resumo_estatistico AS
+SELECT g.nome AS genero, COUNT(j.id_jogo) AS total_jogos, ROUND(AVG(j.avaliacao), 2) AS media_notas
+FROM genero g
+LEFT JOIN jogo j ON g.id_genero = g.id_genero
+GROUP BY g.nome;
+
+-- Trigger para validar tempo mínimo de 1h antes de finalizar um jogo.
+CREATE OR REPLACE FUNCTION fn_valida_progresso() RETURNS TRIGGER AS $$
+BEGIN
+    IF (NEW.status = 'finalizado' AND NEW.horas_jogadas < 1.0) THEN
+        RAISE EXCEPTION 'Erro: Um jogo exige ao menos 1h registrada para ser finalizado.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_valida_conclusao
+BEFORE INSERT OR UPDATE ON jogo
+FOR EACH ROW EXECUTE FUNCTION fn_valida_progresso();
+
+    
