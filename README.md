@@ -49,5 +49,10 @@ Comandos de execução
 O comando pip install prepara o ambiente instalando o SQLAlchemy (o tradutor entre Python e SQL) e o psycopg2 (o driver de comunicação com o PostgreSQL). O comando python main.py inicia o ciclo de vida da aplicação.
 
                            EVIDÊNCIAS
+ Figura 1: Diagrama Entidade-Relacionamento (DER) gerado no DBeaver, demonstrando a integridade referencial, chaves primárias/estrangeiras e as cardinalidades do sistema.
                            
 <img width="1334" height="722" alt="print dbeaver" src="https://github.com/user-attachments/assets/a4bcfba6-f2a1-45b1-83a0-609e33c7c11a" />
+
+Figura 2: Evidência de execução da aplicação Python. O log demonstra a realização de operações CRUD completas e consultas envolvendo relacionamentos entre as entidades do sistema, tudo processado via ORM SQLAlchemy.
+
+<img width="764" height="613" alt="orm acessando" src="https://github.com/user-attachments/assets/5d134a92-44d7-4951-87a9-0ffbf22ddc56" />
