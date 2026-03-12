@@ -47,3 +47,7 @@ As variáveis de ambiente são essenciais para que o código seja portátil. Em 
 
 Comandos de execução
 O comando pip install prepara o ambiente instalando o SQLAlchemy (o tradutor entre Python e SQL) e o psycopg2 (o driver de comunicação com o PostgreSQL). O comando python main.py inicia o ciclo de vida da aplicação.
+
+                           EVIDÊNCIAS
+                           
+<img width="1334" height="722" alt="print dbeaver" src="https://github.com/user-attachments/assets/a4bcfba6-f2a1-45b1-83a0-609e33c7c11a" />
