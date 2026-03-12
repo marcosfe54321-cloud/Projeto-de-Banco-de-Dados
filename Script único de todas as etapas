@@ -1,7 +1,14 @@
- PROJETO FINAL: CATÁLOGO DE JOGOS DIGITAIS
--- I. LIMPEZA E CRIAÇÃO DA ESTRUTURA (DDL)
+ -- =============================================================================
+-- PROJETO: SISTEMA DE CATÁLOGO DE JOGOS DIGITAIS
+-- ENTREGA FINAL CONSOLIDADA (ETAPAS 1 A 6)
+-- =============================================================================
+
+-- =============================================================================
+-- 1. LIMPEZA PREVENTIVA
+-- =============================================================================
+-- Garante que o script possa ser executado do início ao fim sem erros de duplicidade.
 DROP VIEW IF EXISTS v_catalogo_detalhado;
-DROP MATERIALIZED VIEW IF EXISTS mv_resumo_estatistico;
+DROP MATERIALIZED VIEW IF EXISTS mv_estatisticas_genero;
 DROP TABLE IF EXISTS jogo_colecao CASCADE;
 DROP TABLE IF EXISTS colecao CASCADE;
 DROP TABLE IF EXISTS jogo CASCADE;
@@ -9,86 +16,181 @@ DROP TABLE IF EXISTS plataforma CASCADE;
 DROP TABLE IF EXISTS genero CASCADE;
 DROP TABLE IF EXISTS usuario CASCADE;
 
+-- =============================================================================
+-- 2. DDL - ESTRUTURA E INTEGRIDADE (ETAPAS 1, 2 e 4)
+-- =============================================================================
+
+-- Tabela: usuario (identidade e preferências)
 CREATE TABLE usuario (
     id_usuario SERIAL PRIMARY KEY,
+    -- UNIQUE: Impede duplicidade de nomes e e-mails
     nome VARCHAR(50) NOT NULL CONSTRAINT uq_usuario_nome UNIQUE,
     email VARCHAR(100) NOT NULL CONSTRAINT uq_usuario_email UNIQUE,
     senha VARCHAR(255) NOT NULL,
+    plataforma_principal VARCHAR(20),
+    meta_anual_jogos INTEGER DEFAULT 0,
+    -- DEFAULT: Registra automaticamente o carimbo de data do sistema
     data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabela: genero (categorias de jogos)
 CREATE TABLE genero (
     id_genero SERIAL PRIMARY KEY,
     nome VARCHAR(50) NOT NULL UNIQUE
 );
 
+-- Tabela: plataforma (sistemas/hardwares)
 CREATE TABLE plataforma (
     id_plataforma SERIAL PRIMARY KEY,
     nome VARCHAR(50) NOT NULL UNIQUE
 );
 
+-- Tabela: jogo (entidade principal do catálogo)
 CREATE TABLE jogo (
     id_jogo SERIAL PRIMARY KEY,
     id_usuario INTEGER NOT NULL,
     id_genero INTEGER NOT NULL,
     id_plataforma INTEGER NOT NULL,
     titulo VARCHAR(100) NOT NULL,
+    -- DEFAULT: Todo jogo novo inicia com status pendente
     status VARCHAR(20) DEFAULT 'não iniciado',
+    -- DEFAULT: Inicializa o contador de horas zerado
     horas_jogadas NUMERIC(10,2) DEFAULT 0.00,
     avaliacao INTEGER,
-    CONSTRAINT fk_jogo_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
-    CONSTRAINT fk_jogo_genero FOREIGN KEY (id_genero) REFERENCES genero(id_genero) ON DELETE RESTRICT,
-    CONSTRAINT fk_jogo_plataforma FOREIGN KEY (id_plataforma) REFERENCES plataforma(id_plataforma) ON DELETE RESTRICT,
+    data_inicio DATE,
+    data_termino DATE,
+    
+    -- POLÍTICAS REFERENCIAIS:
+    -- ON DELETE CASCADE: Remove jogos se o usuário dono for excluído
+    CONSTRAINT fk_jogo_usuario FOREIGN KEY (id_usuario) 
+        REFERENCES usuario(id_usuario) ON DELETE CASCADE ON UPDATE CASCADE,
+    
+    -- ON DELETE RESTRICT: Protege classificações mestras vinculadas
+    CONSTRAINT fk_jogo_genero FOREIGN KEY (id_genero) 
+        REFERENCES genero(id_genero) ON DELETE RESTRICT ON UPDATE CASCADE,
+    
+    CONSTRAINT fk_jogo_plataforma FOREIGN KEY (id_plataforma) 
+        REFERENCES plataforma(id_plataforma) ON DELETE RESTRICT ON UPDATE CASCADE,
+    
+    -- CONSTRAINTS CHECK: Validações automáticas de negócio
     CONSTRAINT ck_status CHECK (status IN ('não iniciado', 'jogando', 'finalizado')),
     CONSTRAINT ck_avaliacao CHECK (avaliacao >= 0 AND avaliacao <= 10),
     CONSTRAINT ck_horas_positivas CHECK (horas_jogadas >= 0)
 );
 
+-- Tabela: colecao (listas personalizadas do utilizador)
 CREATE TABLE colecao (
     id_colecao SERIAL PRIMARY KEY,
     id_usuario INTEGER NOT NULL,
     nome_colecao VARCHAR(50) NOT NULL,
-    CONSTRAINT fk_colecao_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+    CONSTRAINT fk_colecao_usuario FOREIGN KEY (id_usuario) 
+        REFERENCES usuario(id_usuario) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- Tabela Associativa: jogo_colecao (Relacionamento N:N)
 CREATE TABLE jogo_colecao (
     id_jogo INTEGER NOT NULL,
     id_colecao INTEGER NOT NULL,
+    -- Chave Primária Composta: Garante unicidade do jogo na lista
     PRIMARY KEY (id_jogo, id_colecao),
-    CONSTRAINT fk_rel_jogo FOREIGN KEY (id_jogo) REFERENCES jogo(id_jogo) ON DELETE CASCADE,
-    CONSTRAINT fk_rel_colecao FOREIGN KEY (id_colecao) REFERENCES colecao(id_colecao) ON DELETE CASCADE
+    CONSTRAINT fk_rel_jogo FOREIGN KEY (id_jogo) 
+        REFERENCES jogo(id_jogo) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_rel_colecao FOREIGN KEY (id_colecao) 
+        REFERENCES colecao(id_colecao) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- II. CARGA DE DADOS (DML)
-INSERT INTO usuario (nome, email, senha) VALUES ('joão silva', 'joao.silva@pt.mail', '123'), ('maria fernandes', 'm.fernandes@pt.cloud', '456');
-INSERT INTO genero (nome) VALUES ('rpg'), ('ação'), ('aventura');
-INSERT INTO plataforma (nome) VALUES ('pc'), ('playstation 5');
+-- =============================================================================
+-- 3. DML - CARGA DE DADOS INICIAL (ETAPA 3)
+-- =============================================================================
+
+INSERT INTO usuario (nome, email, senha) VALUES 
+('joão silva', 'joao.silva@pt.mail', 'tuga123'), 
+('maria fernandes', 'm.fernandes@pt.cloud', 'lisboa404'),
+('ricardo santos', 'rsantos@pt.gg', 'porto101');
+
+INSERT INTO genero (nome) VALUES ('rpg'), ('ação'), ('aventura'), ('esporte');
+INSERT INTO plataforma (nome) VALUES ('pc'), ('playstation 5'), ('switch');
+
 INSERT INTO jogo (id_usuario, id_genero, id_plataforma, titulo, status, horas_jogadas, avaliacao) VALUES 
 (1, 1, 1, 'the witcher 3', 'finalizado', 120.50, 10),
-(1, 2, 1, 'cyberpunk 2077', 'jogando', 45.00, 8);
+(1, 2, 1, 'cyberpunk 2077', 'jogando', 45.00, 8),
+(2, 2, 2, 'god of war', 'finalizado', 60.00, 9),
+(3, 1, 3, 'zelda: botw', 'não iniciado', 0.00, NULL);
 
--- III. MECANISMOS AVANÇADOS
+INSERT INTO colecao (id_usuario, nome_colecao) VALUES (1, 'favoritos'), (2, 'platinas futuras');
+INSERT INTO jogo_colecao (id_jogo, id_colecao) VALUES (1, 1), (3, 2);
+
+-- =============================================================================
+-- 4. RECURSOS AVANÇADOS (ETAPA 5)
+-- =============================================================================
+
+-- VIEW: Listagem técnica consolidada do catálogo para a aplicação
 CREATE OR REPLACE VIEW v_catalogo_detalhado AS
-SELECT j.titulo AS jogo, g.nome AS categoria, u.nome AS dono, j.status
-FROM jogo j INNER JOIN genero g ON j.id_genero = g.id_genero
+SELECT 
+    j.titulo AS jogo, g.nome AS categoria, p.nome AS plataforma, u.nome AS dono, j.status
+FROM jogo j 
+INNER JOIN genero g ON j.id_genero = g.id_genero
+INNER JOIN plataforma p ON j.id_plataforma = p.id_plataforma
 INNER JOIN usuario u ON u.id_usuario = j.id_usuario;
 
-CREATE MATERIALIZED VIEW mv_resumo_estatistico AS
-SELECT g.nome AS genero, COUNT(j.id_jogo) AS total, ROUND(AVG(j.avaliacao), 2) AS media
-FROM genero g LEFT JOIN jogo j ON g.id_genero = g.id_genero GROUP BY g.nome;
+-- VIEW MATERIALIZADA: Relatório analítico com agregação de performance
+CREATE MATERIALIZED VIEW mv_estatisticas_genero AS
+SELECT 
+    g.nome AS genero, 
+    COUNT(j.id_jogo) AS total_jogos, 
+    ROUND(AVG(j.avaliacao), 2) AS media_notas,
+    SUM(j.horas_jogadas) AS total_horas_gastas
+FROM genero g 
+LEFT JOIN jogo j ON g.id_genero = j.id_genero 
+GROUP BY g.nome;
 
+-- TRIGGER BEFORE: Impede marcar jogo como finalizado com menos de 1h registrada
 CREATE OR REPLACE FUNCTION fn_valida_progresso() RETURNS TRIGGER AS $$
 BEGIN
     IF (NEW.status = 'finalizado' AND NEW.horas_jogadas < 1.0) THEN
-        RAISE EXCEPTION 'Erro: Regra de 1h não atendida.';
+        RAISE EXCEPTION 'Erro de Negócio: Um jogo exige ao menos 1h registrada para ser finalizado.';
     END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_valida_conclusao BEFORE INSERT OR UPDATE ON jogo
+CREATE TRIGGER trg_valida_conclusao
+BEFORE INSERT OR UPDATE ON jogo
 FOR EACH ROW EXECUTE FUNCTION fn_valida_progresso();
 
--- IV. ÍNDICES DE OTIMIZAÇÃO
+-- TRIGGER AFTER: Cria coleção padrão para cada novo usuário cadastrado
+CREATE OR REPLACE FUNCTION fn_cria_colecao_padrao() RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO colecao (id_usuario, nome_colecao) VALUES (NEW.id_usuario, 'meus favoritos');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_auto_colecao AFTER INSERT ON usuario
+FOR EACH ROW EXECUTE FUNCTION fn_cria_colecao_padrao();
+
+-- PROCEDURE: Centraliza a rotina de reiniciar o progresso de um jogo via CALL
+CREATE OR REPLACE PROCEDURE sp_reiniciar_jogo(p_id_jogo INT) AS $$
+BEGIN
+    UPDATE jogo SET status = 'jogando', horas_jogadas = 0.00 WHERE id_jogo = p_id_jogo;
+    COMMIT;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =============================================================================
+-- 5. OTIMIZAÇÃO E PERFORMANCE (ETAPA 6)
+-- =============================================================================
+
+-- ÍNDICES: Transformam Sequential Scans em Index Scans para buscas frequentes
 CREATE INDEX idx_jogo_titulo ON jogo(titulo);
 CREATE INDEX idx_jogo_id_genero ON jogo(id_genero);
+-- Índice Composto para otimizar dashboards de ranking
+CREATE INDEX idx_jogo_status_nota ON jogo(status, avaliacao);
+
+-- ANÁLISE DE PERFORMANCE: Demonstração do plano de execução otimizado
+EXPLAIN ANALYZE SELECT * FROM jogo WHERE titulo = 'the witcher 3';
+EXPLAIN ANALYZE SELECT * FROM v_catalogo_detalhado WHERE categoria = 'rpg';
+
+-- =============================================================================
+-- FIM DO SCRIPT
+-- =============================================================================
