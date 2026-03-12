@@ -1,0 +1,94 @@
+ PROJETO FINAL: CATÁLOGO DE JOGOS DIGITAIS
+-- I. LIMPEZA E CRIAÇÃO DA ESTRUTURA (DDL)
+DROP VIEW IF EXISTS v_catalogo_detalhado;
+DROP MATERIALIZED VIEW IF EXISTS mv_resumo_estatistico;
+DROP TABLE IF EXISTS jogo_colecao CASCADE;
+DROP TABLE IF EXISTS colecao CASCADE;
+DROP TABLE IF EXISTS jogo CASCADE;
+DROP TABLE IF EXISTS plataforma CASCADE;
+DROP TABLE IF EXISTS genero CASCADE;
+DROP TABLE IF EXISTS usuario CASCADE;
+
+CREATE TABLE usuario (
+    id_usuario SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL CONSTRAINT uq_usuario_nome UNIQUE,
+    email VARCHAR(100) NOT NULL CONSTRAINT uq_usuario_email UNIQUE,
+    senha VARCHAR(255) NOT NULL,
+    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE genero (
+    id_genero SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE plataforma (
+    id_plataforma SERIAL PRIMARY KEY,
+    nome VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE jogo (
+    id_jogo SERIAL PRIMARY KEY,
+    id_usuario INTEGER NOT NULL,
+    id_genero INTEGER NOT NULL,
+    id_plataforma INTEGER NOT NULL,
+    titulo VARCHAR(100) NOT NULL,
+    status VARCHAR(20) DEFAULT 'não iniciado',
+    horas_jogadas NUMERIC(10,2) DEFAULT 0.00,
+    avaliacao INTEGER,
+    CONSTRAINT fk_jogo_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
+    CONSTRAINT fk_jogo_genero FOREIGN KEY (id_genero) REFERENCES genero(id_genero) ON DELETE RESTRICT,
+    CONSTRAINT fk_jogo_plataforma FOREIGN KEY (id_plataforma) REFERENCES plataforma(id_plataforma) ON DELETE RESTRICT,
+    CONSTRAINT ck_status CHECK (status IN ('não iniciado', 'jogando', 'finalizado')),
+    CONSTRAINT ck_avaliacao CHECK (avaliacao >= 0 AND avaliacao <= 10),
+    CONSTRAINT ck_horas_positivas CHECK (horas_jogadas >= 0)
+);
+
+CREATE TABLE colecao (
+    id_colecao SERIAL PRIMARY KEY,
+    id_usuario INTEGER NOT NULL,
+    nome_colecao VARCHAR(50) NOT NULL,
+    CONSTRAINT fk_colecao_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+);
+
+CREATE TABLE jogo_colecao (
+    id_jogo INTEGER NOT NULL,
+    id_colecao INTEGER NOT NULL,
+    PRIMARY KEY (id_jogo, id_colecao),
+    CONSTRAINT fk_rel_jogo FOREIGN KEY (id_jogo) REFERENCES jogo(id_jogo) ON DELETE CASCADE,
+    CONSTRAINT fk_rel_colecao FOREIGN KEY (id_colecao) REFERENCES colecao(id_colecao) ON DELETE CASCADE
+);
+
+-- II. CARGA DE DADOS (DML)
+INSERT INTO usuario (nome, email, senha) VALUES ('joão silva', 'joao.silva@pt.mail', '123'), ('maria fernandes', 'm.fernandes@pt.cloud', '456');
+INSERT INTO genero (nome) VALUES ('rpg'), ('ação'), ('aventura');
+INSERT INTO plataforma (nome) VALUES ('pc'), ('playstation 5');
+INSERT INTO jogo (id_usuario, id_genero, id_plataforma, titulo, status, horas_jogadas, avaliacao) VALUES 
+(1, 1, 1, 'the witcher 3', 'finalizado', 120.50, 10),
+(1, 2, 1, 'cyberpunk 2077', 'jogando', 45.00, 8);
+
+-- III. MECANISMOS AVANÇADOS
+CREATE OR REPLACE VIEW v_catalogo_detalhado AS
+SELECT j.titulo AS jogo, g.nome AS categoria, u.nome AS dono, j.status
+FROM jogo j INNER JOIN genero g ON j.id_genero = g.id_genero
+INNER JOIN usuario u ON u.id_usuario = j.id_usuario;
+
+CREATE MATERIALIZED VIEW mv_resumo_estatistico AS
+SELECT g.nome AS genero, COUNT(j.id_jogo) AS total, ROUND(AVG(j.avaliacao), 2) AS media
+FROM genero g LEFT JOIN jogo j ON g.id_genero = g.id_genero GROUP BY g.nome;
+
+CREATE OR REPLACE FUNCTION fn_valida_progresso() RETURNS TRIGGER AS $$
+BEGIN
+    IF (NEW.status = 'finalizado' AND NEW.horas_jogadas < 1.0) THEN
+        RAISE EXCEPTION 'Erro: Regra de 1h não atendida.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_valida_conclusao BEFORE INSERT OR UPDATE ON jogo
+FOR EACH ROW EXECUTE FUNCTION fn_valida_progresso();
+
+-- IV. ÍNDICES DE OTIMIZAÇÃO
+CREATE INDEX idx_jogo_titulo ON jogo(titulo);
+CREATE INDEX idx_jogo_id_genero ON jogo(id_genero);
